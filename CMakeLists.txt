@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 2.8)
+project( DetectCircle )
+find_package( OpenCV REQUIRED )
+include_directories(  )
+add_executable( DetectCircle DetectCircle.cpp )
+add_executable( fitellipse fitellipse.cpp)
+target_link_libraries( DetectCircle ${OpenCV_LIBS} )
+target_link_libraries( fitellipse ${OpenCV_LIBS} )
