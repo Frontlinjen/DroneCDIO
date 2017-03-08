@@ -1,45 +1,53 @@
-/********************************************************************************
-*
-*
-*  This program is demonstration for ellipse fitting. Program finds
-*  contours and approximate it by ellipses.
-*
-*  Trackbar specify threshold parametr.
-*
-*  White lines is contours. Red lines is fitting ellipses.
-*
-*
-*  Autor:  Denis Burenkov.
-*
-*
-*
-********************************************************************************/
-#include "opencv2/imgproc.hpp"
-#include "opencv2/imgcodecs.hpp"
+#include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
 #include "opencv2/highgui.hpp"
+#include "opencv2/videoio.hpp"
+#include <opencv2/core/utility.hpp>
 #include <iostream>
+#include <string>
+#include <vector>
 
 using namespace cv;
 using namespace std;
 
-static void help()
-{
-    cout <<
-        "\nThis program is demonstration for ellipse fitting. The program finds\n"
-        "contours and approximate it by ellipses.\n"
-        "Call:\n"
-        "./fitellipse [image_name -- Default ../data/stuff.jpg]\n" << endl;
-}
-
 int sliderPos = 70;
-
+#define RECORD_STREAM 1
 
 void processImage(Mat & image);
 
 int main( int argc, char** argv )
 {
+    CommandLineParser args(argc, argv, "{help h | | }{@stream |   |   .avi file to load}");
+    String str = args.get<String>(0);
+    cv::VideoCapture cap;
+    if(str != "")
+    {
+        cap.open(str);
+        if(!cap.isOpened())
+        {
+            printf("%s\n", "Failed to open file");
+            return -1;
+        }
+    }
+    else
+    {
+       cap.open(0);
+    }
+    
+    #if RECORD_STREAM
+    int width = cap.get(CAP_PROP_FRAME_WIDTH);
+    int height = cap.get(CAP_PROP_FRAME_HEIGHT);
+    int fps = cap.get(CAP_PROP_FPS);
+    int fourcc = VideoWriter::fourcc('M', 'J', 'P', 'G'); //cap.get(CAP_PROP_FOURCC);
+    cv::VideoWriter writer("sample.avi", fourcc, fps, Size(width, height)); 
+    #endif
     Mat image;
-    cv::VideoCapture cap("ringmov.mp4");
+   // cv::VideoCapture cap("ringmov.mp4");
+    
+    #if RECORD_STREAM
+    cap.read(image);
+    
+    #endif
     namedWindow("regular", 1);
     namedWindow("bimage", 1); 
     namedWindow("edgeMap", 1); 
@@ -48,12 +56,18 @@ int main( int argc, char** argv )
         cap.set(CV_CAP_PROP_POS_FRAMES, 0);
         while(cap.read(image))
         {
+            #if RECORD_STREAM
+                writer.write(image);
+            #endif
              GaussianBlur(image, image, Size(3, 3), 0, 0, BORDER_DEFAULT );       
              processImage(image);
              imshow("regular", image);
              waitKey(1);
         }
     }
+    #if RECORD_STREAM
+    writer.release();
+    #endif
     printf("jobs done!");
     // Wait for a key stroke; the same function arranges events processing
     waitKey();
@@ -78,36 +92,22 @@ void processImage(Mat & image)
     convertScaleAbs(tmpY, edgeMap);
     imshow("edgeMap", edgeMap);
     GaussianBlur(edgeMap, edgeMap, Size(9, 9), 1, 1, BORDER_DEFAULT );
-    Canny(edgeMap, bimage, 200, 230);
-    imshow("bimage", bimage);
-    return;
-    findContours(bimage, contours, RETR_LIST, CHAIN_APPROX_NONE);
-    /*colorImage = Mat::zeros(tmpY.size(), CV_32FC1);
-    MatConstIterator_<float> itlX = tmpX.begin<float>();
-    MatConstIterator_<float> itlEnd = tmpX.end<float>();
-    MatConstIterator_<float> itlY = tmpY.begin<float>();
-    MatIterator_<float> dst =  colorImage.begin<float>();
-        for (; itlX != itlEnd; ++itlX, ++itlY, ++dst) {
-            *dst = atan2(*itlY, *itlX)/CV_2PI;
-        }
-    imshow("colormap", colorImage);  */
-    
-    Mat cimage = Mat::zeros(bimage.size(), CV_8UC3);
-    for(size_t i = 0; i < contours.size(); i++)
+    //Canny(edgeMap, bimage, 200, 230);
+    //imshow("bimage", bimage);
+
+    std::vector<Vec3f> circles;
+    Mat cimage;// = Mat::zeros(edgeMap.size(), CV_8UC3);
+    cvtColor(edgeMap, cimage, CV_BGR2GRAY);
+    HoughCircles(cimage, circles, CV_HOUGH_GRADIENT, 1.0, 20.0, 100.0, 100.0, 0, 5000);
+    for( size_t i = 0; i < circles.size(); i++ )
     {
-        size_t count = contours[i].size();
-        if( count < 6 )
-            continue;
-
-        Mat pointsf;
-        Mat(contours[i]).convertTo(pointsf, CV_32F);
-        RotatedRect box = fitEllipse(pointsf);
-
-        if( MAX(box.size.width, box.size.height) > MIN(box.size.width, box.size.height)*30 )
-            continue;
-        drawContours(cimage, contours, (int)i, Scalar::all(255), 1, 8);
-
-        ellipse(cimage, box, Scalar(0,0,255), 1, LINE_AA);
-        circle(cimage, box.center, 1, Scalar(255, 255, 255));
+         Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
+         int radius = cvRound(circles[i][2]);
+         // draw the circle center
+         circle( cimage, center, 3, Scalar(255,255,255), -1, 8, 0 );
+         // draw the circle outline
+         circle( cimage, center, radius, Scalar(255,0,255), 3, 8, 0 );
     }
+    imshow("cimage", cimage);
+    return;
 }
